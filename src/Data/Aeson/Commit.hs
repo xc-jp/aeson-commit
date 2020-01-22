@@ -17,20 +17,20 @@ module Data.Aeson.Commit
     , parseCommit
     , decodeJSONFile
     , decodeYamlFile
-    , module Data.Aeson.Types
     )
 where
 
-import Control.Applicative
-import Control.Monad ((>=>))
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.Maybe
-import Control.Monad.Trans.Reader
-import Data.Aeson
-import Data.Aeson.Types hiding (parse)
-import Data.Bifunctor (first)
-import Data.Text (Text, unpack)
-import Data.Yaml (decodeFileEither, prettyPrintParseException)
+import           Control.Applicative
+import           Control.Monad              ((>=>))
+import           Control.Monad.Trans.Class
+import           Control.Monad.Trans.Maybe
+import           Control.Monad.Trans.Reader
+import           Data.Aeson
+import           Data.Aeson.Types           hiding (parse)
+import           Data.Bifunctor             (first)
+import           Data.Text                  (Text, unpack)
+import           Data.Yaml                  (decodeFileEither,
+                                             prettyPrintParseException)
 
 -- | A commit parser
 newtype Commit x = Commit { unCommit :: ReaderT Value (MaybeT Parser) x}
@@ -71,11 +71,14 @@ matchKey key v = withObject (unpack key) (.: key) v
         else fail $ "key mismatch got " <> unpack txt <> ", expected " <> unpack key
       ) v
 
+-- | Run a commit parser with a Value
 parseCommit :: Commit t -> Value -> Either String t
 parseCommit parser = parseEither (runCommit parser)
 
+-- | Decode a JSON-encoded file into a Value
 decodeJSONFile :: FilePath -> IO (Either String Value)
 decodeJSONFile = eitherDecodeFileStrict
 
+-- | Decode a YAML-encoded file into a Value
 decodeYamlFile :: FilePath -> IO (Either String Value)
 decodeYamlFile = fmap (first prettyPrintParseException) . decodeFileEither
