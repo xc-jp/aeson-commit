@@ -34,7 +34,15 @@ import           Data.Yaml                  (decodeFileEither,
 
 -- | A commit parser
 newtype Commit x = Commit { unCommit :: ReaderT Value (MaybeT Parser) x}
-  deriving (Functor, Applicative, Alternative, Monad)
+  deriving (Functor, Applicative, Monad)
+
+instance Alternative Commit where
+  empty = Commit . ReaderT . const . MaybeT . pure $ Nothing
+  a <|> b = Commit $ ReaderT $ \v -> MaybeT $ do
+    x <- runMaybeT $ runReaderT (unCommit a) v
+    case x of
+      Nothing -> runMaybeT $ runReaderT (unCommit b) v
+      Just y  -> pure (Just y)
 
 -- | Create a commit parser that doesn't backtrack if the first parser parses
 -- successfully.
