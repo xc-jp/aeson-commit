@@ -11,6 +11,7 @@
 module Data.Aeson.Commit
     ( commit
     , runCommit
+    , unCommit
     , Commit
     , parseKey
     , matchKey
@@ -21,25 +22,36 @@ module Data.Aeson.Commit
 where
 
 import           Control.Applicative
-import           Control.Monad              ((>=>))
-import           Control.Monad.Trans.Class
+import           Control.Monad              (join)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans.Reader
 import           Data.Aeson
 import           Data.Aeson.Types           hiding (parse)
-import           Data.Bifunctor             (first)
+import           Data.Bifunctor             (first, second)
 import           Data.Text                  (Text, unpack)
 import           Data.Yaml                  (decodeFileEither,
                                              prettyPrintParseException)
 
 -- | A commit parser
 newtype Commit x = Commit { unCommit :: ReaderT Value (MaybeT Parser) x}
-  deriving (Functor, Applicative, Alternative, Monad)
+  deriving (Functor, Applicative, Monad)
+
+instance Alternative Commit where
+  empty = Commit . ReaderT . const . MaybeT . pure $ Nothing
+  a <|> b = Commit $ ReaderT $ \v -> MaybeT $ do
+    x <- runMaybeT $ runReaderT (unCommit a) v
+    case x of
+      Nothing -> runMaybeT $ runReaderT (unCommit b) v
+      Just y  -> pure (Just y)
 
 -- | Create a commit parser that doesn't backtrack if the first parser parses
 -- successfully.
 commit :: (Value -> Parser x) -> (x -> Parser y) -> Commit y
-commit f g = Commit . ReaderT $ MaybeT . pure . parseMaybe f >=> lift . g
+commit f g = Commit . ReaderT $ \v -> MaybeT $ do
+    mx <- optional (f v)
+    case mx of
+      Nothing -> pure Nothing
+      Just x  -> Just <$> g x
 
 -- | Run a commit parser by picking the first matching parser that commits.
 -- The returned parser fails if no parser matches.
@@ -71,14 +83,20 @@ matchKey key v = withObject (unpack key) (.: key) v
         else fail $ "key mismatch got " <> unpack txt <> ", expected " <> unpack key
       ) v
 
--- | Run a commit parser with a Value
+-- | Run a commit parser on a Value
 parseCommit :: Commit t -> Value -> Either String t
 parseCommit parser = parseEither (runCommit parser)
 
--- | Decode a JSON-encoded file into a Value
-decodeJSONFile :: FilePath -> IO (Either String Value)
-decodeJSONFile = eitherDecodeFileStrict
+-- | Decode a file with a commit parser given a way to decode the file into a Value.
+decodeFileWith
+  :: (FilePath -> IO (Either String Value))
+  -> Commit a -> FilePath -> IO (Either String a)
+decodeFileWith decoder c = fmap (join . second (parseCommit c)) . decoder
 
--- | Decode a YAML-encoded file into a Value
-decodeYamlFile :: FilePath -> IO (Either String Value)
-decodeYamlFile = fmap (first prettyPrintParseException) . decodeFileEither
+-- | Decode a JSON-encoded file.
+decodeJSONFile :: Commit a -> FilePath -> IO (Either String a)
+decodeJSONFile = decodeFileWith eitherDecodeFileStrict
+
+-- | Decode a YAML-encoded file.
+decodeYamlFile :: Commit a -> FilePath -> IO (Either String a)
+decodeYamlFile = decodeFileWith (fmap (first prettyPrintParseException) . decodeFileEither)

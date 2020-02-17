@@ -28,3 +28,29 @@ library
   ghc-options:
     -Wall
     -Wno-name-shadowing
+
+test-suite tasty
+  type:
+    exitcode-stdio-1.0
+  hs-source-dirs:
+    test/tasty
+  other-modules:
+    Data.Aeson.CommitTest
+  build-depends:
+    base
+    , hspec
+    , tasty
+    , tasty-hspec
+    , aeson-commit
+    , mtl
+    , transformers
+    , some
+    , containers
+    , aeson
+    , text
+  main-is: Main.hs
+  default-language:
+    Haskell2010
+  ghc-options:
+    -Wall
+    -Wno-name-shadowing
