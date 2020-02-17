@@ -11,6 +11,7 @@
 module Data.Aeson.Commit
     ( commit
     , runCommit
+    , unCommit
     , Commit
     , parseKey
     , matchKey
@@ -21,8 +22,7 @@ module Data.Aeson.Commit
 where
 
 import           Control.Applicative
-import           Control.Monad              (join, (>=>))
-import           Control.Monad.Trans.Class
+import           Control.Monad              (join)
 import           Control.Monad.Trans.Maybe
 import           Control.Monad.Trans.Reader
 import           Data.Aeson
@@ -47,7 +47,11 @@ instance Alternative Commit where
 -- | Create a commit parser that doesn't backtrack if the first parser parses
 -- successfully.
 commit :: (Value -> Parser x) -> (x -> Parser y) -> Commit y
-commit f g = Commit . ReaderT $ MaybeT . pure . parseMaybe f >=> lift . g
+commit f g = Commit . ReaderT $ \v -> MaybeT $ do
+    mx <- optional (f v)
+    case mx of
+      Nothing -> pure Nothing
+      Just x  -> Just <$> g x
 
 -- | Run a commit parser by picking the first matching parser that commits.
 -- The returned parser fails if no parser matches.
