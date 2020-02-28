@@ -1,102 +1,43 @@
-{-# LANGUAGE DataKinds                  #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE FlexibleInstances          #-}
-{-# LANGUAGE GADTs                      #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE MultiParamTypeClasses      #-}
-{-# LANGUAGE PolyKinds                  #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE TypeFamilies               #-}
-{-# LANGUAGE TypeOperators              #-}
-module Data.Aeson.Commit
-    ( commit
-    , runCommit
-    , unCommit
-    , Commit
-    , parseKey
-    , matchKey
-    , parseCommit
-    , decodeJSONFile
-    , decodeYamlFile
-    )
-where
+{-# LANGUAGE DerivingVia #-}
 
-import           Control.Applicative
-import           Control.Monad              (join)
-import           Control.Monad.Trans.Maybe
-import           Control.Monad.Trans.Reader
-import           Data.Aeson
-import           Data.Aeson.Types           hiding (parse)
-import           Data.Bifunctor             (first, second)
-import           Data.Text                  (Text, unpack)
-import           Data.Yaml                  (decodeFileEither,
-                                             prettyPrintParseException)
+module Data.Aeson.Commit where
 
--- | A commit parser
-newtype Commit x = Commit { unCommit :: ReaderT Value (MaybeT Parser) x}
-  deriving (Functor, Applicative, Monad)
+import Control.Applicative
+import Data.Aeson
+import qualified Data.Text as T
+import Data.Aeson.Types
+import Data.Void (Void, absurd)
+import Data.Monoid (Dual (..))
+import Control.Monad.Except
 
-instance Alternative Commit where
-  empty = Commit . ReaderT . const . MaybeT . pure $ Nothing
-  a <|> b = Commit $ ReaderT $ \v -> MaybeT $ do
-    x <- runMaybeT $ runReaderT (unCommit a) v
-    case x of
-      Nothing -> runMaybeT $ runReaderT (unCommit b) v
-      Just y  -> pure (Just y)
+-- | A parser that has _two_ failure modes; the 'ExceptT' or in the underlying 'Parser'.
+--   The alternative instance only recovers from failures in the `ExceptT`.
+--   This means that, as soon as we successfully construct a 'Right' value, the 'Alternative' considers the 'Commit' a success, even though the inner 'Parser' can still fail.
+--
+--   The 'Void' guarantuees that that parser contains an error value.
+newtype Commit a = Commit {unCommit :: ExceptT (Parser Void) Parser a}
+  deriving (Monad, Functor, Applicative)
+  deriving Alternative via (ExceptT (Dual (Parser Void)) Parser)
+    -- If both e1 and e2 fail, the default Alternative instance would mean (e1 <|> e2) = e2. This makes it so that it fails as e1.
+    -- To elaborate: The Alternative instance for ExceptT combines errors using <>. The <> for Parser is <|>, which is right-leaning.
+    -- By going through the 'Dual', we make it left-leaning, which seems to be the better behavior, but I'm interested in hearing arguments to the contrary.
 
--- | Create a commit parser that doesn't backtrack if the first parser parses
--- successfully.
-commit :: (Value -> Parser x) -> (x -> Parser y) -> Commit y
-commit f g = Commit . ReaderT $ \v -> MaybeT $ do
-    mx <- optional (f v)
-    case mx of
-      Nothing -> pure Nothing
-      Just x  -> Just <$> g x
+-- | Construct a commit.
+--   If the first parser succeeds, the 'Commit' is a success, and any failures in the inner action will be preserved.
+commit :: Parser a -> (a -> Parser b) -> Commit b
+commit pre post = Commit $ do
+  a <- ExceptT $ captureError pre -- Lift pre's error to the ExceptT level
+  lift $ post a
+    where
+      captureError :: Parser b -> Parser (Either (Parser Void) b)
+      captureError p = Right <$> p <|> pure (Left $ (const undefined) <$> p)
 
--- | Run a commit parser by picking the first matching parser that commits.
--- The returned parser fails if no parser matches.
-runCommit :: Commit x -> Value -> Parser x
-runCommit go value = runMaybeT (runReaderT (unCommit go) value) >>= matched
-  where
-   matched Nothing  = fail $ "No parser matches value " <> show value
-   matched (Just y) = pure y
+runCommit :: Commit a -> Parser a
+runCommit (Commit f) = runExceptT f >>= either (fmap absurd) pure
 
--- | Parse a key by name in an object.
-parseKey
-  :: FromJSON a
-  => Text
-  -> Value
-  -> Parser a
-parseKey key = withObject (unpack key) $ \o -> o .: key
-
--- | Match key against an object or a string.
--- If the parsed Value is an object ensure that the object has the key.
--- If the parsed Value is a string match the key against the string.
-matchKey
-  :: Text
-  -> Value
-  -> Parser ()
-matchKey key v = withObject (unpack key) (.: key) v
-  <|> withText (unpack key) (\txt ->
-      if key == txt
-        then pure ()
-        else fail $ "key mismatch got " <> unpack txt <> ", expected " <> unpack key
-      ) v
-
--- | Run a commit parser on a Value
-parseCommit :: Commit t -> Value -> Either String t
-parseCommit parser = parseEither (runCommit parser)
-
--- | Decode a file with a commit parser given a way to decode the file into a Value.
-decodeFileWith
-  :: (FilePath -> IO (Either String Value))
-  -> Commit a -> FilePath -> IO (Either String a)
-decodeFileWith decoder c = fmap (join . second (parseCommit c)) . decoder
-
--- | Decode a JSON-encoded file.
-decodeJSONFile :: Commit a -> FilePath -> IO (Either String a)
-decodeJSONFile = decodeFileWith eitherDecodeFileStrict
-
--- | Decode a YAML-encoded file.
-decodeYamlFile :: Commit a -> FilePath -> IO (Either String a)
-decodeYamlFile = decodeFileWith (fmap (first prettyPrintParseException) . decodeFileEither)
+-- | Convenience wrapper around 'commit' for when the commit is simply checking whether a key is present in some object.
+--   If it is, it will append the key to the JSONPath of the inner context through '<?>'.
+--   This is should give the proper JSON path for error messages, although I'm not entirely sure if this is idiomatic.
+(.:>)  :: FromJSON a => Object -> T.Text -> (a -> Parser b) -> Commit b
+(o .:> k) cont = commit (o .: k) (\v -> cont v <?> Key k)
