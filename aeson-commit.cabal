@@ -23,7 +23,7 @@ library
     base
     , aeson
     , text
-    , transformers
+    , mtl
     , yaml
   ghc-options:
     -Wall
