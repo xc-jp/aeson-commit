@@ -31,7 +31,7 @@ commit pre post = Commit $ do
   lift $ post a
     where
       captureError :: Parser b -> Parser (Either (Parser Void) b)
-      captureError p = Right <$> p <|> pure (Left $ undefined <$> p)
+      captureError p = Right <$> p <|> pure (Left $ (const undefined) <$> p)
 
 runCommit :: Commit a -> Parser a
 runCommit (Commit f) = runExceptT f >>= either (fmap absurd) pure
