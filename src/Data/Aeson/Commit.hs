@@ -1,15 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DerivingVia #-}
 
 module Data.Aeson.Commit where
 
-import Control.Applicative
-import Data.Aeson
-import qualified Data.Text as T
-import Data.Aeson.Types
-import Data.Void (Void, absurd)
-import Data.Monoid (Dual (..))
-import Control.Monad.Except
+import           Control.Applicative  (Alternative (..))
+import           Control.Monad.Except
+import           Data.Aeson.Types
+import           Data.Text            (Text)
+import           Data.Void            (Void, absurd)
 
 -- | A parser that has _two_ failure modes; the 'ExceptT' or in the underlying 'Parser'.
 --   The alternative instance only recovers from failures in the `ExceptT`.
@@ -17,11 +14,7 @@ import Control.Monad.Except
 --
 --   The 'Void' guarantuees that that parser contains an error value.
 newtype Commit a = Commit {unCommit :: ExceptT (Parser Void) Parser a}
-  deriving (Monad, Functor, Applicative)
-  deriving Alternative via (ExceptT (Dual (Parser Void)) Parser)
-    -- If both e1 and e2 fail, the default Alternative instance would mean (e1 <|> e2) = e2. This makes it so that it fails as e1.
-    -- To elaborate: The Alternative instance for ExceptT combines errors using <>. The <> for Parser is <|>, which is right-leaning.
-    -- By going through the 'Dual', we make it left-leaning, which seems to be the better behavior, but I'm interested in hearing arguments to the contrary.
+  deriving (Monad, Functor, Applicative, Alternative)
 
 -- | Construct a commit.
 --   If the first parser succeeds, the 'Commit' is a success, and any failures in the inner action will be preserved.
@@ -39,5 +32,19 @@ runCommit (Commit f) = runExceptT f >>= either (fmap absurd) pure
 -- | Convenience wrapper around 'commit' for when the commit is simply checking whether a key is present in some object.
 --   If it is, it will append the key to the JSONPath of the inner context through '<?>'.
 --   This is should give the proper JSON path for error messages, although I'm not entirely sure if this is idiomatic.
-(.:>)  :: FromJSON a => Object -> T.Text -> (a -> Parser b) -> Commit b
+(.:>)  :: FromJSON a => Object -> Text -> (a -> Parser b) -> Commit b
 (o .:> k) cont = commit (o .: k) (\v -> cont v <?> Key k)
+
+-- | Turn a 'Parser' into a 'Commit'.
+--   Unlike 'liftParser', the parser's failure is recoverable.
+--
+-- > fromParser p = commit p pure
+fromParser :: Parser a -> Commit a
+fromParser p = commit p pure
+
+-- | Turn a 'Parser' into a 'Commit'.
+--   Unlike 'fromParser', the parser's failure is _not_ recoverable, i.e. the commit always succeeds.
+--
+-- > liftParser p = commit (pure ()) (\() -> p) = Commit (lift p)
+liftParser :: Parser a -> Commit a
+liftParser p = commit (pure ()) (const p)
