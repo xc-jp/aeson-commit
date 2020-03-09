@@ -20,11 +20,10 @@ library
   hs-source-dirs:
     src
   build-depends:
-    base
+      base
     , aeson
-    , text
     , mtl
-    , yaml
+    , text
   ghc-options:
     -Wall
     -Wno-name-shadowing
@@ -37,17 +36,18 @@ test-suite tasty
   other-modules:
     Data.Aeson.CommitTest
   build-depends:
-    base
+      base
+    , aeson
+    , aeson-qq
+    , aeson-commit
+    , containers
     , hspec
+    , mtl
+    , some
     , tasty
     , tasty-hspec
-    , aeson-commit
-    , mtl
-    , transformers
-    , some
-    , containers
-    , aeson
     , text
+    , transformers
   main-is: Main.hs
   default-language:
     Haskell2010

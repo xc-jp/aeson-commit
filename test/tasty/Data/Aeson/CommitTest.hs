@@ -1,62 +1,50 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE QuasiQuotes #-}
+
 module Data.Aeson.CommitTest (tests) where
 
 import           Control.Applicative
 import           Data.Aeson.Commit
 import           Data.Aeson.Types
-import           Data.Text           (unpack)
+import           Data.Aeson.QQ
+import           Data.Text           (Text)
 import           Test.Tasty.Hspec
 
 tests :: Spec
-tests =
-  describe "Backtracking" $ do
-    it "commits" commitTest
-    it "backtracks" backtrackTest
-    it "no match" noMatchTest
-    it "nested fail" nestedFail
+tests = testParserWithCases pNested
+  [ ( "fails"
+    , [aesonQQ| {} |]
+    , Left "Error in $: key \"value\" not present"
+    )
+  , ( "succeeds unnested"
+    , [aesonQQ| { value: "top" } |]
+    , Right "top"
+    )
+  , ( "succeeds and prefers nested"
+    , [aesonQQ| { value: "top" , nested: { value: "nest" } } |]
+    , Right "nest"
+    )
+  , ( "fails on malformed nested"
+    , [aesonQQ| { value: "top", nested: { foo: 9 } } |]
+    , Left "Error in $.nested: key \"value\" not present"
+    )
+  , ( "fails on nested type mismatch"
+    , [aesonQQ| { value: "top", nested: 9 } |]
+    , Left "Error in $.nested: parsing nestedObj failed, expected Object, but encountered Number"
+    )
+  ]
+  where 
+    pNested :: Value -> Parser Text
+    pNested = withObject "topLevel" $ \o -> runCommit $
+      (o .:> "nested") (withObject "nestedObj" (.: "value"))
+      <|> fromParser (o .: "value")
+        
 
-commitTest :: IO ()
-commitTest
-  = parseCommit parser value
-  `shouldBe`
-  Left "Error in $: parsing hello failed, expected Object, but encountered String"
-  where
-    value = object ["a" .= ("c" :: String)]
-    parser :: Commit ()
-    parser =
-      commit (parseKey "a") (withObject "hello" (const $ pure ()))
-      <|> commit (parseKey "a") (\() -> pure ())
-
-backtrackTest :: IO ()
-backtrackTest
-  = parseCommit parser value
-  `shouldBe` Right "c"
-  where
-  value = object ["a" .= ("c" :: String)]
-  parser :: Commit String
-  parser =
-    commit (parseKey "b") (\() -> fail "no!")
-    <|> commit (parseKey "a") (withText "testing" (pure . unpack))
-
-noMatchTest :: IO ()
-noMatchTest
-  = parseCommit parser value
-  `shouldBe` Left "Error in $: No parser matches value Object (fromList [(\"a\",String \"c\")])"
-  where
-  value = object ["a" .= ("c" :: String)]
-  parser :: Commit String
-  parser =
-    commit (parseKey "b") (\() -> fail "no!")
-    <|> commit (parseKey "c") (withText "testing" (pure . unpack))
-
-fromValue :: Value -> a -> a
-fromValue _ = id
-
-nestedFail :: IO ()
-nestedFail = parseCommit parser value `shouldBe` Left "Error in $: blaargh" -- The path should actually be Error in $.a.c: ...
-  where
-  value = object ["a" .= object ["c" .= ("d" :: String)]]
-  parser :: Commit String
-  parser = commit (parseKey "a") (runCommit inner)
-  inner :: Commit String
-  inner = commit (parseKey "c") (\v -> fromValue v (fail "blaargh"))
+testParserWithCases
+  :: (Eq a, Show a)
+  => (v -> Parser a)
+  -> [(String, v, Either String a)]
+  -> Spec
+testParserWithCases p =
+  mapM_ ( \(name, v, result) -> it name (parseEither p v `shouldBe` result))
