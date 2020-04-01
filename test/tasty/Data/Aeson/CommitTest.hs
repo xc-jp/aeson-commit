@@ -1,13 +1,13 @@
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes       #-}
 
 module Data.Aeson.CommitTest (tests) where
 
 import           Control.Applicative
 import           Data.Aeson.Commit
-import           Data.Aeson.Types
 import           Data.Aeson.QQ
+import           Data.Aeson.Types
 import           Data.Text           (Text)
 import           Test.Tasty.Hspec
 
@@ -15,7 +15,11 @@ tests :: Spec
 tests = testParserWithCases pNested
   [ ( "fails"
     , [aesonQQ| {} |]
-    , Left "Error in $: key \"value\" not present"
+    , Left $ unlines
+      [ "Error in $: No match,"
+      , "- key \"value\" not present"
+      , "- key \"nested\" not present"
+      ]
     )
   , ( "succeeds unnested"
     , [aesonQQ| { value: "top" } |]
@@ -34,12 +38,13 @@ tests = testParserWithCases pNested
     , Left "Error in $.nested: parsing nestedObj failed, expected Object, but encountered Number"
     )
   ]
-  where 
+  where
     pNested :: Value -> Parser Text
-    pNested = withObject "topLevel" $ \o -> runCommit $
-      (o .:> "nested") (withObject "nestedObj" (.: "value"))
-      <|> fromParser (o .: "value")
-        
+    pNested = withObject "topLevel" $ \o ->
+      runCommit
+        $ (o .:> "nested") (withObject "nestedObj" (.: "value"))
+        <|> tryParser (o .: "value")
+
 
 testParserWithCases
   :: (Eq a, Show a)
