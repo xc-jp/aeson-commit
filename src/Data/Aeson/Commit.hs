@@ -48,7 +48,7 @@ runCommit (Commit f) = runExceptT f >>= either handleErrors pure
 (.:>)  :: FromJSON a => Object -> Text -> (a -> Parser b) -> Commit b
 (o .:> k) cont = commit (o .: k) (\v -> cont v <?> Key k)
 
--- | Try to a 'Parser' and commit if it parses successfully.
+-- | Try to parse with a 'Parser' and commit if it parses successfully.
 --   Unlike 'liftParser', the parser's failure is recoverable.
 --
 -- > tryParser p = commit p pure
