@@ -5,6 +5,7 @@
 module Data.Aeson.CommitTest (tests) where
 
 import           Control.Applicative
+import           Control.Monad       (zipWithM)
 import           Data.Aeson.Commit
 import           Data.Aeson.QQ
 import           Data.Aeson.Types
@@ -19,8 +20,8 @@ tests = do
       , [aesonQQ| {} |]
       , Left $ unlines
         [ "Error in $: No match,"
-        , "- key \"nested\" not present"
-        , "- key \"value\" not present"
+        , "- key \"nested\" not found"
+        , "- key \"value\" not found"
         ]
       )
     , ( "succeeds unnested"
@@ -33,7 +34,7 @@ tests = do
       )
     , ( "fails on malformed nested"
       , [aesonQQ| { value: "top", nested: { foo: 9 } } |]
-      , Left "Error in $.nested: key \"value\" not present"
+      , Left "Error in $.nested: key \"value\" not found"
       )
     , ( "fails on nested type mismatch"
       , [aesonQQ| { value: "top", nested: 9 } |]
@@ -46,7 +47,7 @@ tests = do
       , Left $ unlines
         [ "Error in $: No match,"
         , "- parsing array failed, expected Array, but encountered Object"
-        , "- .foo: key \"bar\" not present"
+        , "- .foo: key \"bar\" not found"
         ]
       )
     , ("fails with nested relative path"
@@ -62,7 +63,34 @@ tests = do
       , Left "Error in $: parsing Int failed, expected Number, but encountered Object"
       )
     ]
+  testParserWithCases (\v -> runCommit $ commit (withArray "arr" pure v) (parseJSONListWith parser2))
+    [ ("includes common path"
+      , [aesonQQ| [ [1, 2, 3], {"foo": {"bar": ["hello"]}} ] |]
+      , Left $ unlines
+        [ "Error in $[1]: No match,"
+        , "- parsing array failed, expected Array, but encountered Object"
+        , "- .foo.bar[0]: parsing Int failed, expected Number, but encountered String"
+        ]
+      )
+    ]
+  testParserWithCases (\v -> runCommit
+    $   (commit (withObject "o" (withKey "foo" (.: "bar")) v) pure :: Commit Value)
+    <|> (commit (withObject "o" (withKey "foo" (.: "baz")) v) pure :: Commit Value)
+    )
+    [ ("includes common path"
+      , [aesonQQ| {"foo": {"bax": ["hello"]}} |]
+      , Left $ unlines
+        [ "Error in $.foo: No match,"
+        , "- key \"bar\" not found"
+        , "- key \"baz\" not found"
+        ]
+      )
+    ]
   where
+    parseJSONListWith :: (Value -> Parser a) -> Array -> Parser [a]
+    parseJSONListWith f =
+          zipWithM (\i v -> f v <?> Index i) ([0..] :: [Int])
+        . toList
     withKey :: FromJSON a => Text -> (a -> Parser b) -> Object -> Parser b
     withKey key p o = o .: key >>= \v -> p v <?> Key key
     parser2 :: Value -> Parser [Int]

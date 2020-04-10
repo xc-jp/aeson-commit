@@ -14,8 +14,7 @@ module Data.Aeson.Commit
 import           Control.Applicative  (Alternative (..))
 import           Control.Monad.Except
 import           Data.Aeson.Types
-import           Data.Char            (isAlpha, isAlphaNum)
-import           Data.Text            (Text, unpack)
+import           Data.Text            (Text)
 import           Data.Void            (Void, vacuous)
 
 -- | A parser that has _two_ failure modes; the 'ExceptT' or in the underlying 'Parser'.
@@ -63,32 +62,32 @@ liftParser p = commit (pure ()) (const p)
 
 -- | Format the error messages from the passed 'Parser's.
 formatFail
-  :: ([(JSONPath, String)] -> (JSONPath, String))
+  :: ([(JSONPath, String)] -> String)
   -> [Parser Void]
   -> Parser a
-formatFail f = handleErrors
+formatFail f ps = vacuous (go ps [])
   where
-  handleErrors :: [Parser Void] -> Parser a
-  handleErrors ps = vacuous (go ps [])
-    where
-    go [] errors =
-      let (path, error) = f (reverse errors)
-      in parserThrowError path error
-    go (y:ys) msgs = parserCatchError y $ \path msg ->
-      go ys ((path,msg):msgs)
+  go [] errors =
+    let error = f (reverse errors)
+    in parserThrowError [] error
+      -- The empty path ([]) is relative from the current parser's failure, not the absolute JSONPath
+      -- Since `aeson` doesn't export any way of specifying an absolute JSONPath we cannot do better than
+      -- this here.
+  go (y:ys) msgs = parserCatchError y $ \path msg ->
+    go ys ((path,msg):msgs)
 
 -- | Output the many errors as a YAML encoded list. If the error
 -- messages have different 'JSONPath's then the longest common prefix
 -- is used in the top-level error message and the non-empty relative paths
 -- from the top-level path is shown at the respective error message.
-failList :: [(JSONPath, String)] -> (JSONPath, String)
-failList [] = ([], "No parsers tried")
-failList [(path, msg)] = (path, msg)
+failList :: [(JSONPath, String)] -> String
+failList [] = "No parsers tried"
+failList [(_, msg)] = msg
 failList errors =
   let (paths, msgs) = unzip errors
       common = commonPrefix paths
       relative = fmap (drop (length common)) paths
-  in (common, "No match,\n" <> unlines (zipWith showError relative msgs))
+  in "No match,\n" <> unlines (zipWith showError relative msgs)
   where
   showError [] msg  = "- " <> msg
   showError rel msg = "- " <> formatRelativePath rel <> ": " <> msg
@@ -97,33 +96,3 @@ failList errors =
   commonPrefix (x:xs) = foldr common x xs
     where
     common as bs = fst <$> takeWhile (uncurry (==)) (zip as bs)
-
--- | Format a <http://goessner.net/articles/JsonPath/ JSONPath> as a 'String'
--- which represents the path relative to some root object.
---
--- The function is exposed first in aeson-1.4.6.0 but we're building against aeson-1.4.5.0
-formatRelativePath :: JSONPath -> String
-formatRelativePath = format ""
-  where
-    format :: String -> JSONPath -> String
-    format pfx []                = pfx
-    format pfx (Index idx:parts) = format (pfx ++ "[" ++ show idx ++ "]") parts
-    format pfx (Key key:parts)   = format (pfx ++ formatKey key) parts
-
-    formatKey :: Text -> String
-    formatKey key
-       | isIdentifierKey strKey = "." ++ strKey
-       | otherwise              = "['" ++ escapeKey strKey ++ "']"
-      where strKey = unpack key
-
-    isIdentifierKey :: String -> Bool
-    isIdentifierKey []     = False
-    isIdentifierKey (x:xs) = isAlpha x && all isAlphaNum xs
-
-    escapeKey :: String -> String
-    escapeKey = concatMap escapeChar
-
-    escapeChar :: Char -> String
-    escapeChar '\'' = "\\'"
-    escapeChar '\\' = "\\\\"
-    escapeChar c    = [c]
