@@ -32,14 +32,16 @@ newtype Commit a = Commit {unCommit :: ExceptT [Parser Void] Parser a}
   deriving (Monad, Functor, Applicative, Alternative)
 
 -- | Construct a commit.
---   If the first parser succeeds, the 'Commit' is a success, and any failures in the inner action will be preserved.
-commit :: Parser a -> (a -> Parser b) -> Commit b
-commit pre post
-  = Commit $ ExceptT (captureError pre) -- Lift pre's error to the ExceptT level
-  >>= lift . post -- Keep post's error in the inner (committed) Parser
-    where
-      captureError :: Parser b -> Parser (Either [Parser Void] b)
-      captureError p = Right <$> p <|> pure (Left [fmap (const undefined) p])
+--   If the first parser succeeds up until the running of the inner parser
+--   the 'Commit' is a success and any failures in the inner parser will be preserved.
+commit :: ((b -> Parser c) -> a -> Parser c) -> (b -> Parser c) -> a -> Commit c
+commit super sub v
+  = Commit $ ExceptT (captureError (super (const $ pure undefined) v)) -- Lift super's error to the ExceptT level
+  >> lift (super sub v) -- Keep sub's error in the outer (committed) Parser by
+                        -- running again within super to preserve super's path
+   where
+     captureError :: Parser b -> Parser (Either [Parser Void] b)
+     captureError p = Right <$> p <|> pure (Left [fmap (const undefined) p])
 
 -- | Run a 'Commit' parser. If the 'Commit' parser fails to commit the error
 -- messages in the resulting parser are formatted with the 'failList' function.
@@ -48,21 +50,21 @@ runCommit (Commit (ExceptT e)) = e >>= either (formatFail failList) pure
 
 -- | Convenience wrapper around 'commit' for when the commit is simply checking whether a key is present in some object.
 --   If it is, it will append the key to the JSONPath of the inner context through '<?>'.
---   This is should give the proper JSON path for error messages, although I'm not entirely sure if this is idiomatic.
+--   This is should give the proper JSON path for error messages
 (.:>)  :: FromJSON a => Object -> Text -> (a -> Parser b) -> Commit b
-(o .:> k) cont = commit (o .: k) (\v -> cont v <?> Key k)
+(o .:> k) cont = commit (\p -> withKey k (parseJSON >=> p)) cont o
 
 -- | Like '(.:)' but allows passing an explicit parser for the extracted 'Value'
-withKey :: String -> (Value -> Parser b) -> Object -> Parser b
-withKey key' p obj =
+withKey :: Text -> (Value -> Parser b) -> Object -> Parser b
+withKey key p obj =
   case HM.lookup key obj of
     Nothing -> fail $ "key " <> show key' <> " not found"
     Just v  -> p v <?> Key key
-  where key = pack key'
+  where key' = unpack key
 
 -- | Equivalent to 'withObject key $ withKey key p'
-objWithKey :: String -> (Value -> Parser b) -> Value -> Parser b
-objWithKey key p = withObject key $ withKey key p
+objWithKey :: Text -> (Value -> Parser b) -> Value -> Parser b
+objWithKey key p = withObject (unpack key) $ withKey key p
 
 -- | Parses an array while including path index information
 overArray :: (Value -> Parser a) -> Array -> Parser [a]
@@ -75,14 +77,14 @@ overArray p = traverse tag . flip zip [0..] . toList
 --
 -- > tryParser p = commit p pure
 tryParser :: Parser a -> Commit a
-tryParser p = commit p pure
+tryParser p = commit (\_inner () -> p) pure ()
 
 -- | Turn a 'Parser' into a 'Commit'.
 --   Unlike 'tryParser', the parser's failure is _not_ recoverable, i.e. the parse is always committed.
 --
 -- > liftParser p = commit (pure ()) (\() -> p) = Commit (lift p)
 liftParser :: Parser a -> Commit a
-liftParser p = commit (pure ()) (const p)
+liftParser p = commit ($) (const p) ()
 
 -- | Format the error messages from the passed 'Parser's.
 formatFail
