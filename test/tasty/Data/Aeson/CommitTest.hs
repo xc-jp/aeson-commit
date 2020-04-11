@@ -8,7 +8,6 @@ import           Control.Applicative
 import           Data.Aeson.Commit
 import           Data.Aeson.QQ
 import           Data.Aeson.Types
-import           Data.Foldable       (toList)
 import           Data.Text           (Text)
 import           Test.Tasty.Hspec
 
@@ -46,7 +45,7 @@ tests = do
       , Left $ unlines
         [ "Error in $: No match,"
         , "- parsing array failed, expected Array, but encountered Object"
-        , "- .foo: key \"bar\" not present"
+        , "- $.foo: key \"bar\" not found"
         ]
       )
     , ("fails with nested relative path"
@@ -54,21 +53,30 @@ tests = do
       , Left $ unlines
         [ "Error in $: No match,"
         , "- parsing array failed, expected Array, but encountered Object"
-        , "- .foo.bar[0]: parsing Int failed, expected Number, but encountered String"
+        , "- $.foo.bar[0]: parsing Int failed, expected Number, but encountered String"
         ]
       )
     , ("fails after commitment"
       , [aesonQQ| [{}] |]
-      , Left "Error in $: parsing Int failed, expected Number, but encountered Object"
+      , Left "Error in $[0]: parsing Int failed, expected Number, but encountered Object"
+      )
+    ]
+  testParserWithCases
+    (\v -> withArray "arr" (overArray parser2) v)
+    [ ("path remains correct for a commit nested within another parser"
+      , [aesonQQ| [ [1, 2, 3], {"foo": {"bar": ["hello"]}} ] |]
+      , Left $ unlines
+        [ "Error in $[1]: No match,"
+        , "- $[1]: parsing array failed, expected Array, but encountered Object"
+        , "- $[1].foo.bar[0]: parsing Int failed, expected Number, but encountered String"
+        ]
       )
     ]
   where
-    withKey :: FromJSON a => Text -> (a -> Parser b) -> Object -> Parser b
-    withKey key p o = o .: key >>= \v -> p v <?> Key key
     parser2 :: Value -> Parser [Int]
-    parser2 v= runCommit $
-      commit (withArray "array" pure v) (fmap toList . traverse parseJSON)
-      <|> commit (withObject "object" (withKey "foo" (withKey "bar" parseJSON)) v) pure
+    parser2 v = runCommit $
+      commit (withArray "array" pure v) (overArray parseJSON)
+      <|> commit (objWithKey "foo" (objWithKey "bar" parseJSON) v) pure
     pNested :: Value -> Parser Text
     pNested = withObject "topLevel" $ \o ->
       runCommit

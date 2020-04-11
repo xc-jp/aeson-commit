@@ -24,6 +24,7 @@ library
     , aeson
     , mtl
     , text
+    , unordered-containers
   ghc-options:
     -Wall
     -Wno-name-shadowing

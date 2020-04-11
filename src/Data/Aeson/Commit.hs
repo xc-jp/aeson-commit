@@ -6,6 +6,9 @@ module Data.Aeson.Commit
   , Commit(..)
   , formatFail
   , failList
+  , withKey
+  , objWithKey
+  , overArray
   , tryParser
   , liftParser
   , (.:>)
@@ -15,7 +18,9 @@ import           Control.Applicative  (Alternative (..))
 import           Control.Monad.Except
 import           Data.Aeson.Types
 import           Data.Char            (isAlpha, isAlphaNum)
-import           Data.Text            (Text, unpack)
+import           Data.Foldable        (toList)
+import qualified Data.HashMap.Strict  as HM
+import           Data.Text            (Text, pack, unpack)
 import           Data.Void            (Void, vacuous)
 
 -- | A parser that has _two_ failure modes; the 'ExceptT' or in the underlying 'Parser'.
@@ -47,6 +52,24 @@ runCommit (Commit (ExceptT e)) = e >>= either (formatFail failList) pure
 (.:>)  :: FromJSON a => Object -> Text -> (a -> Parser b) -> Commit b
 (o .:> k) cont = commit (o .: k) (\v -> cont v <?> Key k)
 
+-- | Like '(.:)' but allows passing an explicit parser for the extracted 'Value'
+withKey :: String -> (Value -> Parser b) -> Object -> Parser b
+withKey key' p obj =
+  case HM.lookup key obj of
+    Nothing -> fail $ "key " <> show key' <> " not found"
+    Just v  -> p v <?> Key key
+  where key = pack key'
+
+-- | Equivalent to 'withObject key $ withKey key p'
+objWithKey :: String -> (Value -> Parser b) -> Value -> Parser b
+objWithKey key p = withObject key $ withKey key p
+
+-- | Parses an array while including path index information
+overArray :: (Value -> Parser a) -> Array -> Parser [a]
+overArray p = traverse tag . flip zip [0..] . toList
+  where
+    tag (v,i) = p v <?> Index i
+
 -- | Try to parse with a 'Parser' and commit if it parses successfully.
 --   Unlike 'liftParser', the parser's failure is recoverable.
 --
@@ -77,26 +100,18 @@ formatFail f = handleErrors
     go (y:ys) msgs = parserCatchError y $ \path msg ->
       go ys ((path,msg):msgs)
 
--- | Output the many errors as a YAML encoded list. If the error
--- messages have different 'JSONPath's then the longest common prefix
--- is used in the top-level error message and the non-empty relative paths
--- from the top-level path is shown at the respective error message.
+-- | Output the many errors as a YAML encoded list
 failList :: [(JSONPath, String)] -> (JSONPath, String)
 failList [] = ([], "No parsers tried")
 failList [(path, msg)] = (path, msg)
 failList errors =
-  let (paths, msgs) = unzip errors
-      common = commonPrefix paths
-      relative = fmap (drop (length common)) paths
-  in (common, "No match,\n" <> unlines (zipWith showError relative msgs))
+  ( [] -- We return '[]' here leaving the upstream parser to print the path
+       -- to where this group of errors began
+  , "No match,\n" <> unlines (map (uncurry showError) errors))
   where
   showError [] msg  = "- " <> msg
-  showError rel msg = "- " <> formatRelativePath rel <> ": " <> msg
-  commonPrefix :: Eq a => [[a]] -> [a]
-  commonPrefix []     = []
-  commonPrefix (x:xs) = foldr common x xs
-    where
-    common as bs = fst <$> takeWhile (uncurry (==)) (zip as bs)
+  showError rel msg = "- " <> formatPath rel <> ": " <> msg
+
 
 -- | Format a <http://goessner.net/articles/JsonPath/ JSONPath> as a 'String'
 -- which represents the path relative to some root object.
@@ -127,3 +142,6 @@ formatRelativePath = format ""
     escapeChar '\'' = "\\'"
     escapeChar '\\' = "\\\\"
     escapeChar c    = [c]
+
+formatPath :: JSONPath -> String
+formatPath path = "$" ++ formatRelativePath path
