@@ -79,6 +79,13 @@ tests = do
       , Left "Error in $.foo: parsing Int failed, expected Number, but encountered String"
       )
     ]
+  testParserWithCases
+    (runCommit . tryParser . objWithKey "bar" (objWithKey "foo" (parseJSON :: Value -> Parser Int)))
+    [ ("tryParser retains path on error"
+      , [aesonQQ| { "bar": {"foo": "fail"} } |]
+      , Left "Error in $.bar.foo: parsing Int failed, expected Number, but encountered String"
+      )
+    ]
   where
     parser2 :: Value -> Parser [Int]
     parser2 v = runCommit $
