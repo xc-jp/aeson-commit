@@ -21,7 +21,7 @@ library
     src
   build-depends:
       base
-    , aeson
+    , aeson >= 1.4.6.0
     , mtl
     , text
     , unordered-containers

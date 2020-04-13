@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes                 #-}
 
 module Data.Aeson.Commit
   ( commit
@@ -17,10 +18,9 @@ module Data.Aeson.Commit
 import           Control.Applicative  (Alternative (..))
 import           Control.Monad.Except
 import           Data.Aeson.Types
-import           Data.Char            (isAlpha, isAlphaNum)
 import           Data.Foldable        (toList)
 import qualified Data.HashMap.Strict  as HM
-import           Data.Text            (Text, pack, unpack)
+import           Data.Text            (Text, unpack)
 import           Data.Void            (Void, vacuous)
 
 -- | A parser that has _two_ failure modes; the 'ExceptT' or in the underlying 'Parser'.
@@ -34,9 +34,9 @@ newtype Commit a = Commit {unCommit :: ExceptT [Parser Void] Parser a}
 -- | Construct a commit.
 --   If the first parser succeeds up until the running of the inner parser
 --   the 'Commit' is a success and any failures in the inner parser will be preserved.
-commit :: ((b -> Parser c) -> a -> Parser c) -> (b -> Parser c) -> a -> Commit c
+commit :: (forall r. (b -> Parser r) -> a -> Parser r) -> (b -> Parser c) -> a -> Commit c
 commit super sub v
-  = Commit $ ExceptT (captureError (super (const $ pure undefined) v)) -- Lift super's error to the ExceptT level
+  = Commit $ ExceptT (captureError (super (const $ pure ()) v)) -- Lift super's error to the ExceptT level
   >> lift (super sub v) -- Keep sub's error in the outer (committed) Parser by
                         -- running again within super to preserve super's path
    where
@@ -77,7 +77,7 @@ overArray p = traverse tag . flip zip [0..] . toList
 --
 -- > tryParser p = commit p pure
 tryParser :: Parser a -> Commit a
-tryParser p = commit (\_inner () -> p) pure ()
+tryParser p = commit (\inner () -> p >>= inner) pure ()
 
 -- | Turn a 'Parser' into a 'Commit'.
 --   Unlike 'tryParser', the parser's failure is _not_ recoverable, i.e. the parse is always committed.
@@ -113,37 +113,3 @@ failList errors =
   where
   showError [] msg  = "- " <> msg
   showError rel msg = "- " <> formatPath rel <> ": " <> msg
-
-
--- | Format a <http://goessner.net/articles/JsonPath/ JSONPath> as a 'String'
--- which represents the path relative to some root object.
---
--- The function is exposed first in aeson-1.4.6.0 but we're building against aeson-1.4.5.0
-formatRelativePath :: JSONPath -> String
-formatRelativePath = format ""
-  where
-    format :: String -> JSONPath -> String
-    format pfx []                = pfx
-    format pfx (Index idx:parts) = format (pfx ++ "[" ++ show idx ++ "]") parts
-    format pfx (Key key:parts)   = format (pfx ++ formatKey key) parts
-
-    formatKey :: Text -> String
-    formatKey key
-       | isIdentifierKey strKey = "." ++ strKey
-       | otherwise              = "['" ++ escapeKey strKey ++ "']"
-      where strKey = unpack key
-
-    isIdentifierKey :: String -> Bool
-    isIdentifierKey []     = False
-    isIdentifierKey (x:xs) = isAlpha x && all isAlphaNum xs
-
-    escapeKey :: String -> String
-    escapeKey = concatMap escapeChar
-
-    escapeChar :: Char -> String
-    escapeChar '\'' = "\\'"
-    escapeChar '\\' = "\\\\"
-    escapeChar c    = [c]
-
-formatPath :: JSONPath -> String
-formatPath path = "$" ++ formatRelativePath path

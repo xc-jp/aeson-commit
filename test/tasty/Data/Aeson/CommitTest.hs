@@ -5,7 +5,6 @@
 module Data.Aeson.CommitTest (tests) where
 
 import           Control.Applicative
-import           Control.Monad       ((>=>))
 import           Data.Aeson.Commit
 import           Data.Aeson.QQ
 import           Data.Aeson.Types
@@ -20,7 +19,7 @@ tests = do
       , Left $ unlines
         [ "Error in $: No match,"
         , "- key \"nested\" not found"
-        , "- key \"value\" not present"
+        , "- key \"value\" not found"
         ]
       )
     , ( "succeeds unnested"
@@ -33,7 +32,7 @@ tests = do
       )
     , ( "fails on malformed nested"
       , [aesonQQ| { value: "top", nested: { foo: 9 } } |]
-      , Left "Error in $.nested: key \"value\" not present"
+      , Left "Error in $.nested: key \"value\" not found"
       )
     , ( "fails on nested type mismatch"
       , [aesonQQ| { value: "top", nested: 9 } |]
@@ -63,7 +62,7 @@ tests = do
       )
     ]
   testParserWithCases
-    (\v -> withArray "arr" (overArray parser2) v)
+    (withArray "arr" (overArray parser2))
     [ ("path remains correct for a commit nested within another parser"
       , [aesonQQ| [ [1, 2, 3], {"foo": {"bar": ["hello"]}} ] |]
       , Left $ unlines
@@ -78,6 +77,13 @@ tests = do
     [ ("subparser retains path from super-parser"
       , [aesonQQ| { "foo": "fail" } |]
       , Left "Error in $.foo: parsing Int failed, expected Number, but encountered String"
+      )
+    ]
+  testParserWithCases
+    (runCommit . tryParser . objWithKey "bar" (objWithKey "foo" (parseJSON :: Value -> Parser Int)))
+    [ ("tryParser retains path on error"
+      , [aesonQQ| { "bar": {"foo": "fail"} } |]
+      , Left "Error in $.bar.foo: parsing Int failed, expected Number, but encountered String"
       )
     ]
   where
