@@ -43,7 +43,6 @@ test-suite tasty
     , containers
     , hspec
     , mtl
-    , some
     , tasty
     , tasty-hspec
     , text

@@ -17,8 +17,8 @@ tests = testParserWithCases pNested
     , [aesonQQ| {} |]
     , Left $ unlines
       [ "Error in $: No match,"
-      , "- key \"value\" not present"
-      , "- key \"nested\" not present"
+      , "- key \"value\" not found"
+      , "- key \"nested\" not found"
       ]
     )
   , ( "succeeds unnested"
@@ -31,7 +31,7 @@ tests = testParserWithCases pNested
     )
   , ( "fails on malformed nested"
     , [aesonQQ| { value: "top", nested: { foo: 9 } } |]
-    , Left "Error in $.nested: key \"value\" not present"
+    , Left "Error in $.nested: key \"value\" not found"
     )
   , ( "fails on nested type mismatch"
     , [aesonQQ| { value: "top", nested: 9 } |]
