@@ -2,9 +2,11 @@ cabal-version:      >=1.10
 name:               aeson-commit
 version:            1.0
 license:            BSD3
-copyright:          2019 Cross Compass Ltd.
-maintainer:         viktor.kronvall@cross-compass.com
-author:             Cross Compass
+copyright:          2020 Cross Compass Ltd.
+maintainer:         jonascarpay@gmail.com
+author:
+  Viktor Kronvall <viktor.kronvall@cross-compass.com>, Jonas Carpay <jonascarpay@gmail.com>
+
 synopsis:           Parse Aeson data with commitment
 description:
   Aeson parsers backtracks too much for some use cases.
