@@ -1,48 +1,46 @@
+cabal-version:      >=1.10
 name:               aeson-commit
-version:            0.1.0.0
+version:            1.0
+license:            BSD3
+copyright:          2019 Cross Compass Ltd.
+maintainer:         viktor.kronvall@cross-compass.com
+author:             Cross Compass
 synopsis:           Parse Aeson data with commitment
 description:
   Aeson parsers backtracks too much for some use cases.
   The commit parser forbids backtracking for already committed parses.
 
-license:            BSD3
-author:             Cross Compass
-maintainer:         viktor.kronvall@cross-compass.com
-copyright:          2019 Cross Compass Ltd.
 category:           Web
 build-type:         Simple
-cabal-version:      >=1.10
 extra-source-files: README.md
 
 library
   exposed-modules:  Data.Aeson.Commit
-  default-language: Haskell2010
   hs-source-dirs:   src
-  build-depends:
-      aeson
-    , base
-    , mtl
-    , text
-
+  default-language: Haskell2010
   ghc-options:      -Wall -Wno-name-shadowing
+  build-depends:
+      aeson  >=1.5.4.1  && <2
+    , base   >=4.13.0.0 && <5
+    , mtl    >=2.2.2    && <3
+    , text   >=1.2.4.0  && <2
 
 test-suite tasty
   type:             exitcode-stdio-1.0
-  hs-source-dirs:   test/tasty
-  build-depends:
-      aeson
-    , aeson-commit
-    , aeson-qq
-    , base
-    , containers
-    , hspec
-    , mtl
-    , some
-    , tasty
-    , tasty-hspec
-    , text
-    , transformers
-
   main-is:          Main.hs
+  hs-source-dirs:   test/tasty
   default-language: Haskell2010
   ghc-options:      -Wall -Wno-name-shadowing
+  build-depends:
+      aeson         >=1.5.4.1  && <2
+    , aeson-commit
+    , aeson-qq      >=0.8.3    && <1
+    , base          >=4.13.0.0 && <5
+    , containers    >=0.6.2.1  && <1
+    , hspec         >=2.7.4    && <3
+    , mtl           >=2.2.2    && <3
+    , some          >=1.0.1    && <2
+    , tasty         >=1.3.1    && <2
+    , tasty-hspec   >=1.1.5.1  && <2
+    , text          >=1.2.4.0  && <2
+    , transformers  >=0.5.6.2  && <1
