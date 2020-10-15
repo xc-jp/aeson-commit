@@ -1,5 +1,32 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
+{-|
+   Commitment mechanism for aeson parsers.
+   This is comes up when you e.g. want to make a distinction between missing keys and malformed keys.
+   As an example, this parser will look for a key @"nested"@, and if present try to read the embedded @"value"@, or alternatively look for a top level @"value"@:
+
+   > parse o = (o .:> "nested") (withObject "nestedObj" (.: "value"))
+   >       <|> tryParser (o .: "value")
+
+   > { value: "foo", otherField: "bar" }
+   > -> Right "foo"
+   >
+   > { value: "foo", nested: { value: "bar" } }
+   > -> Right "bar"
+   >
+   > { value: "foo", nested: { bar: 9 } }
+   > -> Left "Error in $.nested: key \"value\" not found"
+   >
+   > { value: "foo", nested: 9 }
+   > -> Left "Error in $.nested: parsing nestedObj failed, expected Object, but encountered Number"
+   >
+   > {}
+   > -> Left
+   >   "Error in $: No match,
+   >    - key \"value\" not found"
+   >    - key \"nested\" not found"
+
+-}
 module Data.Aeson.Commit where
 
 import           Control.Applicative  (Alternative (..))
@@ -11,6 +38,9 @@ import           Data.Void            (Void, absurd)
 -- | A 'Parser' that has _two_ failure modes; recoverable and non-recoverable.
 --   The default, recoverable failure is the equivalent to aeson's default 'Parser' behavior.
 --   The non-recoverable failure mode is used to commit to a branch; to commit means that every subsequent failure is non-recoverable.
+--
+--   You turn a commit back into a normal 'Parser' using 'runCommit'.
+--   As an additional benefit, if no commit succeeded the parser error message will contain all encountered errors.
 --
 --   The implementation works by capturing failure in either the 'ExceptT' or in the underlying 'Parser'.
 --   The derived 'Alternative' instance will only recover from failures in the 'ExceptT'.
@@ -29,6 +59,7 @@ commit pre post = Commit $ do
       captureError :: Parser b -> Parser (Either [Parser Void] b)
       captureError p = Right <$> p <|> pure (Left [fmap (const undefined) p])
 
+-- | Recommended way of turning a 'Commit' back into a regular 'Parser'.
 runCommit :: Commit a -> Parser a
 runCommit (Commit f) = runExceptT f >>= either handleErrors pure
   where
