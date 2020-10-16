@@ -1,12 +1,12 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 {-|
-   Commitment mechanism for aeson parsers.
-   This is comes up when you e.g. want to make a distinction between missing keys and malformed keys.
-   As an example, this parser will look for a key @"nested"@, and if present try to read the embedded @"value"@, or alternatively look for a top level @"value"@:
+   Commitment mechanism for aeson 'Parser'.
+   This is comes up when you e.g. want to make a distinction between in error handling for missing keys and malformed keys.
+   As an example, this parser will yield @nested.value@ if there the key @nested@ is present, and @value@ if it is not present.
 
    > parse o = (o .:> "nested") (withObject "nestedObj" (.: "value"))
-   >       <|> tryParser (o .: "value")
+   >         <|> tryParser (o .: "value")
 
    > { value: "foo", otherField: "bar" }
    > -> Right "foo"
@@ -27,7 +27,14 @@
    >    - key \"nested\" not found"
 
 -}
-module Data.Aeson.Commit where
+module Data.Aeson.Commit
+  ( commit
+  , runCommit
+  , (.:>)
+  , tryParser
+  , liftParser
+  , Commit (..)
+  ) where
 
 import           Control.Applicative  (Alternative (..))
 import           Control.Monad.Except
@@ -59,7 +66,7 @@ commit pre post = Commit $ do
       captureError :: Parser b -> Parser (Either [Parser Void] b)
       captureError p = Right <$> p <|> pure (Left [fmap (const undefined) p])
 
--- | Recommended way of turning a 'Commit' back into a regular 'Parser'.
+-- | Turn a 'Commit' back into a regular 'Parser'.
 runCommit :: Commit a -> Parser a
 runCommit (Commit f) = runExceptT f >>= either handleErrors pure
   where
@@ -81,7 +88,7 @@ runCommit (Commit f) = runExceptT f >>= either handleErrors pure
 (.:>)  :: FromJSON a => Object -> Text -> (a -> Parser b) -> Commit b
 (o .:> k) cont = commit (o .: k) (\v -> cont v <?> Key k)
 
--- | Try to parse with a 'Parser' and commit if it parses successfully.
+-- | Turn a 'Parser' into a 'Commit'
 --   Unlike 'liftParser', the parser's failure is recoverable.
 --   
 -- > tryParser empty <|> p = p

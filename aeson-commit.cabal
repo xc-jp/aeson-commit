@@ -1,22 +1,28 @@
 cabal-version:      >=1.10
 name:               aeson-commit
-version:            1.1
+version:            1.2
 license:            BSD3
 copyright:          2020 Cross Compass Ltd.
-maintainer:         jonascarpay@gmail.com
+maintainer:         Jonas Carpay <jonascarpay@gmail.com>
+homepage:           https://github.com/xc-jp/aeson-commit#readme
 author:
-  Viktor Kronvall <viktor.kronvall@cross-compass.com>, Jonas Carpay <jonascarpay@gmail.com>
+  Viktor Kronvall <viktor.kronvall@cross-compass.com>,
+  Jonas Carpay <jonascarpay@gmail.com>
 
 synopsis:           Parse Aeson data with commitment
 description:
   Aeson parsers backtracks too much for some use cases.
   The commit parser forbids backtracking for already committed parses.
 
-category:           Web
+category:           Text, Web, JSON
 build-type:         Simple
 extra-source-files:
   README.md
   CHANGELOG.md
+
+source-repository head
+  type:     git
+  location: git://github.com/xc-jp/aeson-commit
 
 library
   exposed-modules:  Data.Aeson.Commit
