@@ -221,6 +221,7 @@ install:
       #  stack --no-terminal $ARGS solver --update-config)
 
       # Build the dependencies
+      stack init
       stack --no-terminal --install-ghc $ARGS test --bench --only-dependencies
       ;;
     cabal)
