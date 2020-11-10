@@ -154,9 +154,9 @@ jobs:
   #   compiler: ": #stack 8.2.2 osx"
   #   os: osx
 
-  - env: BUILD=stack ARGS="--resolver lts-12"
-    compiler: ": #stack 8.4.4 osx"
-    os: osx
+  # - env: BUILD=stack ARGS="--resolver lts-12"
+  #   compiler: ": #stack 8.4.4 osx"
+  #   os: osx
 
   - env: BUILD=stack ARGS="--resolver lts-14"
     compiler: ": #stack 8.6.5 osx"
