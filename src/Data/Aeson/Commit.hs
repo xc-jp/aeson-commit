@@ -2,8 +2,9 @@
 
 {-|
    Commitment mechanism for aeson 'Parser'.
-   This is comes up when you e.g. want to make a distinction between in error handling for missing keys and malformed keys.
-   As an example, this parser will yield @nested.value@ if there the key @nested@ is present, and @value@ if it is not present.
+   Commitment means that if some initial parsing succeeds, subsequent failures are unrecoverable.
+   In this example, not having the key @nested@ is a normal, recoverable failure, and parsing will continue looking for another key.
+   However, if @nested@ is present but malformed, the entire parser fails.
 
    > parse o = (o .:> "nested") (withObject "nestedObj" (.: "value"))
    >         <|> tryParser (o .: "value")
@@ -46,17 +47,18 @@ import           Data.Void            (Void, absurd)
 --   The default, recoverable failure is the equivalent to aeson's default 'Parser' behavior.
 --   The non-recoverable failure mode is used to commit to a branch; to commit means that every subsequent failure is non-recoverable.
 --
---   You turn a commit back into a normal 'Parser' using 'runCommit'.
---   As an additional benefit, if no commit succeeded the parser error message will contain all encountered errors.
+--   You turn run a 'Commit' and capture its result in a 'Parser' using 'runCommit'.
+--   As an additional benefit, it will contain error info for all attempted parsing branches.
 --
---   The implementation works by capturing failure in either the 'ExceptT' or in the underlying 'Parser'.
---   The derived 'Alternative' instance will only recover from failures in the 'ExceptT'.
+--   The implementation works by wrapping 'Parser' in an 'ExceptT'.
+--   The derived 'Alternative' instance will then only recover from failures in the 'ExceptT'.
 --   This means that as soon as we successfully construct a 'Right' value, the 'Alternative' considers the 'Commit' a success, even though the underlying parser might have failed.
 --   The 'Void' represents the guarantee that we only collect error values.
 newtype Commit a = Commit {unCommit :: ExceptT [Parser Void] Parser a}
   deriving (Monad, Functor, Applicative, Alternative)
 
 -- | Construct a commit.
+--   If the first parser fails, the failure is recoverable through 'Alternative'.
 --   If the first parser succeeds, the 'Commit' is a success, and any failures in the inner action will be preserved.
 commit :: Parser a -> (a -> Parser b) -> Commit b
 commit pre post = Commit $ do
@@ -66,7 +68,7 @@ commit pre post = Commit $ do
       captureError :: Parser b -> Parser (Either [Parser Void] b)
       captureError p = Right <$> p <|> pure (Left [fmap (const undefined) p])
 
--- | Turn a 'Commit' back into a regular 'Parser'.
+-- | Run a 'Commit', capturing its result in a 'Parser'.
 runCommit :: Commit a -> Parser a
 runCommit (Commit f) = runExceptT f >>= either handleErrors pure
   where
@@ -92,6 +94,7 @@ runCommit (Commit f) = runExceptT f >>= either handleErrors pure
 --   Unlike 'liftParser', the parser's failure is recoverable.
 --   
 -- > tryParser empty <|> p = p
+-- > tryParser p = commit p pure
 tryParser :: Parser a -> Commit a
 tryParser p = commit p pure
 
@@ -99,5 +102,6 @@ tryParser p = commit p pure
 --   Unlike 'tryParser', the parser's failure is _not_ recoverable, i.e. the parse is always committed.
 --   
 -- > liftParser empty <|> p = empty
+-- > liftParser p = commit (pure ()) (const p)
 liftParser :: Parser a -> Commit a
 liftParser p = commit (pure ()) (const p)

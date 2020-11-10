@@ -11,8 +11,8 @@ author:
 
 synopsis:           Parse Aeson data with commitment
 description:
-  Aeson parsers backtracks too much for some use cases.
-  The commit parser forbids backtracking for already committed parses.
+  Commitment mechanism for @aeson@ parsers.
+  Commitment means that if some initial parsing succeeds, subsequent failures are unrecoverable.
 
 category:           Text, Web, JSON
 build-type:         Simple

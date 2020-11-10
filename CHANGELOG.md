@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.3]
+### [Changed]
+- Relax version bounds in preparation for uploading to stackage
+- Rewords documentation -- again
+
 ## [1.2]
 ### [Changed]
 - Reword parts of the documentation
