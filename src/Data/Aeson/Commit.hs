@@ -2,13 +2,16 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
 -- |
---   Commitment mechanism for aeson 'Parser'.
---   Commitment means that if some initial parsing succeeds, subsequent failures are unrecoverable.
---   In this example, not having the key @nested@ is a normal, recoverable failure, and parsing will continue looking for another key.
---   However, if @nested@ is present but malformed, the entire parser fails.
+--   Commit mechanism for aeson's 'Parser'.
+--   To commit means that if some initial parsing succeeds, subsequent failures are unrecoverable.
+--
+--   In the following example, we use '.:>' to look for a key @.nested.value@, and if that does not exist, @.value@.
 --
 --   > parse o = (o .:> "nested") (withObject "nestedObj" (.: "value"))
 --   >         <|> tryParser (o .: "value")
+--
+--   Not having the key @nested@ is a normal, recoverable failure, and parsing will continue looking for @value@.
+--   However, if @nested@ is present but malformed, parsing fails.
 --
 --   > { value: "foo", otherField: "bar" }
 --   > -> Right "foo"
@@ -44,15 +47,15 @@ import Data.Void (Void, absurd)
 #if MIN_VERSION_aeson(2,0,0)
 import qualified Data.Aeson.Key as Key
 #else
-import           Data.Text            (Text)
+import Data.Text (Text)
 #endif
 
--- | A 'Parser' that has _two_ failure modes; recoverable and non-recoverable.
---   The default, recoverable failure is the equivalent to aeson's default 'Parser' behavior.
---   The non-recoverable failure mode is used to commit to a branch; to commit means that every subsequent failure is non-recoverable.
+-- | A 'Commit' is a 'Parser' that has two failure modes; recoverable and non-recoverable.
 --
---   You turn run a 'Commit' and capture its result in a 'Parser' using 'runCommit'.
---   As an additional benefit, it will contain error info for all attempted parsing branches.
+--   > tryParser empty <|> p = p
+--   > liftParser empty <|> p = empty
+--
+--   'Commit' is typically constructed using 'commit', and consumed using 'runCommit', which captures its result in a 'Parser'.
 --
 --   The implementation works by wrapping 'Parser' in an 'ExceptT'.
 --   The derived 'Alternative' instance will then only recover from failures in the 'ExceptT'.
@@ -69,6 +72,7 @@ commit pre post = Commit $ do
   a <- ExceptT $ captureError pre
   lift $ post a
   where
+    -- TODO maybe there's a better way to prove something is an error
     captureError :: Parser b -> Parser (Either [Parser Void] b)
     captureError p = Right <$> p <|> pure (Left [fmap (const undefined) p])
 
