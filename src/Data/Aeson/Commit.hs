@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE CPP #-}
 
 {-|
    Commitment mechanism for aeson 'Parser'.
@@ -40,8 +41,12 @@ module Data.Aeson.Commit
 import           Control.Applicative  (Alternative (..))
 import           Control.Monad.Except
 import           Data.Aeson.Types
-import           Data.Text            (Text)
 import           Data.Void            (Void, absurd)
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.Key as Key
+#else
+import           Data.Text            (Text)
+#endif
 
 -- | A 'Parser' that has _two_ failure modes; recoverable and non-recoverable.
 --   The default, recoverable failure is the equivalent to aeson's default 'Parser' behavior.
@@ -87,7 +92,12 @@ runCommit (Commit f) = runExceptT f >>= either handleErrors pure
 
 -- | Convenience wrapper around 'commit' for when the commit is checking whether a key is present in some object.
 --   If it is, it will commit and append the key to the JSONPath of the inner context through '<?>', which will give nicer error messages.
+
+#if MIN_VERSION_aeson(2,0,0)
+(.:>)  :: FromJSON a => Object -> Key.Key -> (a -> Parser b) -> Commit b
+#else
 (.:>)  :: FromJSON a => Object -> Text -> (a -> Parser b) -> Commit b
+#endif
 (o .:> k) cont = commit (o .: k) (\v -> cont v <?> Key k)
 
 -- | Turn a 'Parser' into a 'Commit'
