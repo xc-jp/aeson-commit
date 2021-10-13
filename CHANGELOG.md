@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4]
+### [Added]
+- Nix support
+- Conditionally qualifications for `aeson-2.0`
+### [Changed]
+- Reword documentation
+
 ## [1.3]
 ### [Changed]
 - Relax version bounds in preparation for uploading to stackage
