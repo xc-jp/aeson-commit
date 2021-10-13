@@ -42,10 +42,9 @@ test-suite tasty
   default-language: Haskell2010
   ghc-options:      -Wall -Wno-name-shadowing
   build-depends:
-      aeson         >=1.4     && <2.1
+      aeson         >=1.4  && <2.1
     , aeson-commit
-    , aeson-qq      >=0.8     && <1
-    , base          >=4.10    && <5
-    , tasty         >=1.2     && <2
-    , tasty-hspec   >=1.1.5.1 && <2
-    , text          >=1.2     && <2
+    , aeson-qq      >=0.8  && <1
+    , base          >=4.10 && <5
+    , hspec
+    , text          >=1.2  && <2

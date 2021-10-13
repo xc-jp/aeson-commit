@@ -8,8 +8,7 @@ import Data.Aeson.Commit
 import Data.Aeson.QQ
 import Data.Aeson.Types
 import Data.Text (Text)
-import Test.Tasty
-import Test.Tasty.Hspec
+import Test.Hspec
 
 tests :: Spec
 tests =
@@ -57,4 +56,4 @@ testParserWithCases p =
   mapM_ (\(name, v, result) -> it name (parseEither p v `shouldBe` result))
 
 main :: IO ()
-main = testSpecs tests >>= defaultMain . testGroup "aeson-commit"
+main = hspec tests
