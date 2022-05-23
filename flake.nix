@@ -1,38 +1,38 @@
 {
   description = "aeson-commit";
 
-  inputs.haskellNix.url = "github:input-output-hk/haskell.nix";
-  inputs.nixpkgs.follows = "haskellNix/nixpkgs-unstable";
+  inputs.nixpkgs = { };
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
-  outputs = { self, nixpkgs, flake-utils, haskellNix }:
-    flake-utils.lib.eachDefaultSystem (system:
-      let
-        overlay = self: _: {
-          hsPkgs =
-            self.haskell-nix.project' rec {
-              src = ./.;
-              compiler-nix-name = "ghc8107";
-              shell = {
-                tools = {
-                  cabal = { };
-                  ghcid = { };
-                  haskell-language-server = { };
-                  hlint = { };
-                  ormolu = { };
-                };
-              };
+  outputs = inputs:
+    let
+      overlay = final: prev: {
+        haskell = prev.haskell // {
+          packageOverrides = hfinal: hprev:
+            prev.haskell.packageOverrides hfinal hprev // {
+              aeson-commit = hfinal.callCabal2nix "aeson-commit" ./. { };
             };
         };
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [
-            haskellNix.overlay
-            overlay
-          ];
+      };
+      perSystem = system:
+        let
+          pkgs = import inputs.nixpkgs { inherit system; overlays = [ overlay ]; };
+          hspkgs = pkgs.haskellPackages;
+        in
+        {
+          devShell = hspkgs.shellFor {
+            withHoogle = true;
+            packages = p: [ p.aeson-commit ];
+            buildInputs = [
+              hspkgs.cabal-install
+              hspkgs.haskell-language-server
+              hspkgs.hlint
+              hspkgs.ormolu
+              pkgs.bashInteractive
+            ];
+          };
+          defaultPackage = hspkgs.aeson-commit;
         };
-        flake = pkgs.hsPkgs.flake { };
-      in
-      flake // { defaultPackage = flake.packages."aeson-commit:lib:aeson-commit"; }
-    );
+    in
+    { inherit overlay; } // inputs.flake-utils.lib.eachDefaultSystem perSystem;
 }

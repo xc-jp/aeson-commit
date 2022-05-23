@@ -1,0 +1,7 @@
+cradle:
+  multi:
+    - path: "src"
+      config: {cradle: {cabal: {component: "lib:aeson-commit"}}}
+
+    - path: "test"
+      config: {cradle: {cabal: {component: "aeson-commit:tasty"}}}
