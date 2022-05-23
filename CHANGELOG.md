@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.5]
+### [Changed]
+- [#15] Depend on transformers instead of mtl, to sidestep current export issues in mtl 2.3
+
 ## [1.4]
 ### [Added]
 - Nix support
