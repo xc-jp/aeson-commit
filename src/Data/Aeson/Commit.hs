@@ -41,9 +41,11 @@ module Data.Aeson.Commit
 where
 
 import Control.Applicative (Alternative (..))
-import Control.Monad.Except
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.Except
 import Data.Aeson.Types
 import Data.Void (Void, absurd)
+
 #if MIN_VERSION_aeson(2,0,0)
 import qualified Data.Aeson.Key as Key
 #else
