@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6]
+### [Changed]
+- Bump aeson upper bound
+- Change to `major.minor.patch` versioning
+
 ## [1.5]
 ### [Changed]
 - [#15] Depend on transformers instead of mtl, to sidestep current export issues in mtl 2.3

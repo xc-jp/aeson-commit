@@ -1,6 +1,6 @@
 cabal-version:      >=1.10
 name:               aeson-commit
-version:            1.5
+version:            1.6.0
 license:            BSD3
 copyright:          2020 Cross Compass Ltd.
 maintainer:         Jonas Carpay <jonascarpay@gmail.com>
